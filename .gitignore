@@ -1,0 +1,7 @@
+composer.lock
+composer.phar
+vendor
+wordpress-tests-lib
+.buildpath
+.project
+.settings
