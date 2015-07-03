@@ -156,7 +156,7 @@ class Test extends WP_UnitTestCase
         $master->update_custom_fields($this->site, $this->ID, $remote_id);
         $master->update_custom_fields($this->site, $this->ID, $remote_id);
         
-        $this->assertEquals(2, $master->calls);
+        $this->assertEquals(2, $master->client->calls);
     }
 
     function test_get_site_list()
@@ -165,12 +165,12 @@ class Test extends WP_UnitTestCase
         $site_opt[0]['enabled'] = 1;
         $site_opt[1]['name'] = 'site2';
         $site_opt[1]['enabled'] = 1;
-        update_option('master_plugin_sites_options', $site_opt);
+        update_option(SITE_OPT, $site_opt);
         
         $post_opt['custom1']['site1'] = 1;
         $post_opt['custom1']['site2'] = 1;
         $post_opt['custom2']['site2'] = 1;
-        update_option('master_plugin_posts_options', $post_opt);
+        update_option(POST_OPT, $post_opt);
         
         $ID = wp_insert_post(array(
             'post_content' => 'test',
@@ -191,16 +191,18 @@ class Test extends WP_UnitTestCase
     {
         $site_opt[0]['name'] = 'site1';
         $site_opt[0]['enabled'] = 1;
-        update_option('master_plugin_sites_options', $site_opt);
+        update_option(SITE_OPT, $site_opt);
         $post_opt['post']['site1'] = 1;
-        update_option('master_plugin_posts_options', $post_opt);
+        update_option(POST_OPT, $post_opt);
         
         $master = new Master();
         $master->publish_post($this->ID, $this->post);
         
-        $mapping = get_post_meta($this->ID, 'meta_master_mappping', true);
+        $mapping = get_post_meta($this->ID, MAPPING_META_KEY, true);
         $remote_id = $mapping['site1'];
         $remote_post = get_post($remote_id);
         $this->assertEquals($this->post->post_content, $remote_post->post_content);
     }
+    
+    
 }

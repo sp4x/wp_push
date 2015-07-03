@@ -1,18 +1,33 @@
 <?php
 
+
+require_once  __DIR__ . '/client.php'; 
+require_once  __DIR__ . '/media.php'; 
+
 class Master
 {
+    var $client;
+    
+    var $manager;
 
-    var $calls;
-
-    function __construct()
+    function __construct($client = null, $manager = null)
     {
-        $calls = 0;
+        if ($client) {
+            $this->client = $client;
+        } else {
+            $this->client = defined("WP_TESTS_DOMAIN") ? new xmlrpc_test_client() : new xmlrpc_client();
+        }
+        
+        if ($manager) {
+            $this->manager = $manager;
+        } else {
+            $this->manager = new NoUploadMediaManager($this->client);
+        }
     }
 
     public function push($post, $site)
     {
-        $mapping = get_post_meta($post->ID, 'meta_master_mappping', true);
+        $mapping = get_post_meta($post->ID, MAPPING_META_KEY, true);
         if (isset($mapping[$site])) {
             $content = array();
             $content['post_title'] = $post->post_title;
@@ -28,7 +43,7 @@ class Master
         
         $thumbnail_id = get_post_thumbnail_id($post->ID);
         if ($thumbnail_id) {
-            $remote_thumb_id = $this->get_or_push_thumbnail($thumbnail_id, $site);
+            $remote_thumb_id = $this->manager->get_or_push_thumbnail($thumbnail_id, $site);
             $content['post_thumbnail'] = $remote_thumb_id;
         }
         
@@ -37,12 +52,12 @@ class Master
         $content = apply_filters('push_content', $content, $post, $site);
         if (isset($mapping[$site])) {
             $remote_id = $mapping[$site];
-            $this->xmlrpc_edit_post($site, $remote_id, $content);
+            $this->client->xmlrpc_edit_post($site, $remote_id, $content);
         } else {
-            $remote_id = $this->xmlrpc_new_post($site, $content);
+            $remote_id = $this->client->xmlrpc_new_post($site, $content);
             $mapping[$site] = $remote_id;
             $mapping = apply_filters('update_mapping', $mapping, $post, $site);
-            update_post_meta($post->ID, 'meta_master_mappping', $mapping);
+            update_post_meta($post->ID, MAPPING_META_KEY, $mapping);
         }
         return $remote_id;
     }
@@ -54,27 +69,13 @@ class Master
             $images = preg_split('/,/', $matches[1]);
             $remote_images = array();
             foreach ($images as $gallery_thumbnail_id) {
-                $remote_images[] = $this->get_or_push_thumbnail($gallery_thumbnail_id, $site);
+                $remote_images[] = $this->manager->get_or_push_thumbnail($gallery_thumbnail_id, $site);
             }
             $ids = implode(',', $remote_images);
             $replacement = "[gallery ids=\"$ids\"]";
             $post_content = preg_replace($gallery_shortcode_regex, $replacement, $post_content);
         }
         return $post_content;
-    }
-
-    function get_or_push_thumbnail($thumbnail_id, $site)
-    {
-        $image = get_post($thumbnail_id);
-        $mapping = get_post_meta($thumbnail_id, 'meta_master_mappping', true);
-        if ($mapping && isset($mapping[$site])) {
-            return $mapping[$site];
-        }
-        $remote_id = $this->push($image, $site);
-        $wp_attachment_metadata = get_post_meta($thumbnail_id, '_wp_attachment_metadata', true);
-        $wp_attached_file = get_post_meta($thumbnail_id, '_wp_attached_file', true);
-        $this->xmlrpc_update_attachment_meta($remote_id, $wp_attachment_metadata, $wp_attached_file);
-        return $remote_id;
     }
 
     /**
@@ -97,7 +98,7 @@ class Master
     {
         $custom_fields = $this->get_custom_fields($site, $id, $remote_id);
         if ($custom_fields) {
-            $this->xmlrpc_edit_post($site, $remote_id, array(
+            $this->client->xmlrpc_edit_post($site, $remote_id, array(
                 'custom_fields' => $custom_fields
             ));
         }
@@ -106,12 +107,16 @@ class Master
     private function get_custom_fields($site, $id, $remote_id)
     {
         $custom_fields = array();
-        $local = $this->get_local_custom_fields($id);
+        $local_server = new local_server();
+        $local = $local_server->get_local_custom_fields($id);
+        $local = array_filter($local, array($this, 'skip_mapping'));
+        $local = array_filter($local, array($this, 'skip_private_keys'));
+        $local = apply_filters('sync_custom_fields', $local, $site);
         
         if (empty($local))
             return false;
         
-        $remote = $this->get_remote_custom_fields($site, $remote_id);
+        $remote = $this->client->get_remote_custom_fields($site, $remote_id);
         
         foreach ($local as $item) {
             unset($item['id']);
@@ -126,6 +131,16 @@ class Master
             }
         }
         return $custom_fields;
+    }
+    
+    private function skip_mapping($item)
+    {
+        return $item['key'] != MAPPING_META_KEY;
+    }
+    
+    private function skip_private_keys($item) {
+        $meta_key = $item['key'];
+        return $meta_key == '_wp_attachment_metadata' || substr($item['key'], 0, 1) != "_";
     }
 
     private function item_to_update($item, $remote_item)
@@ -145,84 +160,6 @@ class Master
         return - 1;
     }
 
-    private function get_remote_custom_fields($site, $remote_id)
-    {
-        $wp_xmlrpc_server = new wp_xmlrpc_server();
-        $args = array(
-            1,
-            'admin',
-            'password',
-            $remote_id,
-            array(
-                'custom_fields'
-            )
-        );
-        $remote = $wp_xmlrpc_server->wp_getPost($args);
-        $remote = $remote['custom_fields'];
-        return $remote;
-    }
-
-    private function get_local_custom_fields($id)
-    {
-        $wp_xmlrpc_server = new wp_xmlrpc_server();
-        $args = array(
-            1,
-            'admin',
-            'password',
-            $id,
-            array(
-                'custom_fields'
-            )
-        );
-        $local = $wp_xmlrpc_server->wp_getPost($args);
-        $local = $local['custom_fields'];
-        $local = array_filter($local, array(
-            $this,
-            'update_needed'
-        ));
-        return $local;
-    }
-
-    private function update_needed($item)
-    {
-        $meta_key = $item['key'];
-        return strstr($meta_key, 'meta_tk') || $meta_key == '_wp_attachment_metadata';
-    }
-
-    private function xmlrpc_new_post($site, $content)
-    {
-        $this->calls ++;
-        $wp_xmlrpc_server = new wp_xmlrpc_server();
-        $args = array(
-            1,
-            'admin',
-            'password',
-            $content
-        );
-        return (int) $wp_xmlrpc_server->wp_newPost($args);
-    }
-
-    private function xmlrpc_edit_post($site, $id, $content_struct)
-    {
-        $this->calls ++;
-        $wp_xmlrpc_server = new wp_xmlrpc_server();
-        $args = array(
-            1,
-            'admin',
-            'password',
-            $id,
-            $content_struct
-        );
-        
-        return (int) $wp_xmlrpc_server->wp_editPost($args);
-    }
-
-    private function xmlrpc_update_attachment_meta($id, $wp_attachment_metadata, $wp_attached_file)
-    {
-        update_post_meta($id, '_wp_attachment_metadata', $wp_attachment_metadata);
-        update_post_meta($id, '_wp_attached_file', $wp_attached_file);
-    }
-
     private function entry_enabled($entry)
     {
         return isset($entry['enabled']) && $entry['enabled'];
@@ -235,8 +172,8 @@ class Master
 
     function get_site_list($post)
     {
-        $site_opt = get_option('master_plugin_sites_options');
-        $post_opt = get_option('master_plugin_posts_options');
+        $site_opt = get_option(SITE_OPT);
+        $post_opt = get_option(POST_OPT);
         $destinations = array_filter($site_opt, array(
             $this,
             'entry_enabled'
@@ -261,7 +198,7 @@ class Master
 
     function update_post_meta($meta_id, $post_id)
     {
-        $mapping = get_post_meta($post_id, 'meta_master_mappping', true);
+        $mapping = get_post_meta($post_id, MAPPING_META_KEY, true);
         if ($mapping) {
             foreach ($mapping as $site => $remote_id) {
                 $this->update_custom_fields($site, $post_id, $remote_id);
@@ -269,3 +206,21 @@ class Master
         }
     }
 }
+
+
+class local_server extends wp_xmlrpc_server
+{
+
+    function get_local_custom_fields($id)
+    {
+        $fields = array(
+            'custom_fields'
+        );
+        $post = get_post($id, ARRAY_A);
+        $local = $this->_prepare_post($post, $fields);
+        return $local['custom_fields'];
+    }
+    
+}
+
+

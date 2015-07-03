@@ -113,7 +113,7 @@ function master_initialize_plugin_options()
         'master_posts_options_callback', // Callback used to render the description of the section
         'master_plugin_posts_options'); // Page on which to add this section of options
      
-    foreach (get_post_types(array('_builtin' => false)) as $post_type) {
+    foreach ($types as $post_type) {
         add_settings_field($post_type, // ID used to identify the field throughout the plugin
             __($post_type), // The label to the left of the option interface element
             'master_posts_callback', // The name of the function responsible for rendering the option interface
