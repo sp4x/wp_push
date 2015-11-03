@@ -36,16 +36,16 @@ function master_plugin_display()
     		<?php settings_errors(); ?>
     		<form method="post" action="options.php">
     	    <?php
-                settings_fields('master_plugin_sites_options');
-                do_settings_sections('master_plugin_sites_options');
+                settings_fields(SITE_OPT);
+                do_settings_sections(SITE_OPT);
                 submit_button();
             ?>
     		</form>
     		
     		<form method="post" action="options.php">
     		<?php 
-        		settings_fields('master_plugin_posts_options');
-        		do_settings_sections('master_plugin_posts_options');
+        		settings_fields(POST_OPT);
+        		do_settings_sections(POST_OPT);
         		submit_button();
     		?>
     		</form>
@@ -64,7 +64,7 @@ function master_plugin_display()
 
 function master_plugin_default_sites_options()
 {
-    $defaults = array( array('url' => 'www.edilone.it', 'enabled' => 1, 'username' => 'redazione', 'password' => 'password') );
+    $defaults = array( array('name' => 'www.edilone.it', 'enabled' => 1, 'username' => 'redazione', 'password' => 'password') );
     
     return apply_filters('master_plugin_default_sites_options', $defaults);
 }
@@ -86,46 +86,48 @@ function master_initialize_plugin_options()
 {
     
     // If the plugin options don't exist, create them.
-    if (false == get_option('master_plugin_sites_options')) {
-        add_option('master_plugin_sites_options',  master_plugin_default_sites_options());
+    if (false == get_option(SITE_OPT)) {
+        add_option(SITE_OPT,  master_plugin_default_sites_options());
     } // end if
       
     // First, we register a section. This is necessary since all future options must belong to a
     add_settings_section('master_sites_section', // ID used to identify this section and with which to register options
         __('Opzioni Siti'), // Title to be displayed on the administration page
         'master_sites_options_callback', // Callback used to render the description of the section
-        'master_plugin_sites_options'); // Page on which to add this section of options
+        SITE_OPT); // Page on which to add this section of options
                                        
     add_settings_field('master_sites', // ID used to identify the field throughout the plugin
         __('Siti'), // The label to the left of the option interface element
         'master_sites_callback', // The name of the function responsible for rendering the option interface
-        'master_plugin_sites_options', // The page on which this option will be displayed
+        SITE_OPT, // The page on which this option will be displayed
         'master_sites_section');
     
     // If the plugin options don't exist, create them.
-    if (false == get_option('master_plugin_posts_options')) {
-        add_option('master_plugin_posts_options',  master_plugin_default_posts_options());
+    if (false == get_option(POST_OPT)) {
+        add_option(POST_OPT,  master_plugin_default_posts_options());
     } // end if
     
     // First, we register a section. This is necessary since all future options must belong to a
     add_settings_section('master_posts_section', // ID used to identify this section and with which to register options
         __('Opzioni Post'), // Title to be displayed on the administration page
         'master_posts_options_callback', // Callback used to render the description of the section
-        'master_plugin_posts_options'); // Page on which to add this section of options
+        POST_OPT); // Page on which to add this section of options
      
+    
+    global $types;
     foreach ($types as $post_type) {
         add_settings_field($post_type, // ID used to identify the field throughout the plugin
             __($post_type), // The label to the left of the option interface element
             'master_posts_callback', // The name of the function responsible for rendering the option interface
-            'master_plugin_posts_options', // The page on which this option will be displayed
+            POST_OPT, // The page on which this option will be displayed
             'master_posts_section',
             array('post_type' => $post_type)
         );
     }
     
     // Finally, we register the fields with WordPress
-    register_setting('master_plugin_sites_options', 'master_plugin_sites_options', 'sanitize_sites_options');
-    register_setting('master_plugin_posts_options', 'master_plugin_posts_options');
+    register_setting(SITE_OPT, SITE_OPT, 'sanitize_sites_options');
+    register_setting(POST_OPT, POST_OPT);
     
     
     
@@ -135,7 +137,7 @@ function master_initialize_plugin_options()
 
 function sanitize_sites_options($sites) {
     foreach (array_keys($sites) as $i) {
-        if (empty($sites[$i]['url'])) {
+        if (empty($sites[$i]['name'])) {
             unset($sites[$i]);
         }
     }
@@ -154,11 +156,27 @@ function master_posts_options_callback()
     echo '<p>' . __('Inserisci i dati relativi ai post') . '</p>';
 }
 
+function test_connection($site) {
+    $domain = $site['name'];
+    $client = new IXR_Client("http://$domain/xmlrpc.php");
+    if ($client->query("wp.getUsersBlogs", $site['username'], $site['password'])) {
+        return "OK";
+    }
+    return $client->getErrorMessage();
+}
+
 function master_sites_callback()
 {
-    $sites = get_option('master_plugin_sites_options');
+    $sites = get_option(SITE_OPT);
     $i = 0;
 ?>
+<script type="text/javascript">
+function remove_site(button) {
+	var row = jQuery(button).parent().parent();
+	row.find("input[type=text]").val("");
+	row.hide();
+}
+</script>
 <table class="widefat">
 	<thead>
 		<tr valign="top">
@@ -167,26 +185,30 @@ function master_sites_callback()
 			<th scope="column" class="manage-column"><?php _e( 'Username'); ?></th>
 			<th scope="column" class="manage-column"><?php _e( 'Password' ); ?></th>
 			<th scope="column" class="manage-column"><?php _e( 'Status' ); ?></th>
+			<th scope="column" class="manage-column"></th>
 		</tr>
 	</thead>
 	<tbody>
 	<?php foreach ($sites as $site): ?>
+	<?php $input_name = SITE_OPT . "[$i]"; ?>
 		<tr>
-			<td><input type="checkbox" name="master_plugin_sites_options[<?php _e($i); ?>][enabled]" value="1"
+			<td><input type="checkbox" name="<?php _e($input_name . "[enabled]"); ?>" value="1"
 			     <?php  checked( 1, isset( $site['enabled'] ) ? 1 : 0 ) ?> /></td>
-			<td><input type="text" name="master_plugin_sites_options[<?php _e($i); ?>][url]" value="<?php echo $site['url'];  ?>" ></td>
-			<td><input type="text" name="master_plugin_sites_options[<?php _e($i); ?>][username]" value="<?php echo $site['username'];  ?>" ></td>
-			<td><input type="text" name="master_plugin_sites_options[<?php _e($i); ?>][password]" value="<?php echo $site['password'];  ?>" ></td>
-			<td><label>OK</label></td>
+			<td><input type="text" name="<?php _e($input_name . "[name]"); ?>" value="<?php echo $site['name'];  ?>" ></td>
+			<td><input type="text" name="<?php _e($input_name . "[username]"); ?>" value="<?php echo $site['username'];  ?>" ></td>
+			<td><input type="text" name="<?php _e($input_name . "[password]"); ?>" value="<?php echo $site['password'];  ?>" ></td>
+			<td><label><?php echo test_connection($site); ?></label></td>
+			<td><a class="delete-button" href="#" onclick="remove_site(this)">Elimina</a></td>
 		</tr>
     <?php $i++; ?>
 	<?php endforeach; ?>
+	<?php $input_name = SITE_OPT . "[$i]"; ?>
 	   <tr>
-			<td><input type="checkbox" name="master_plugin_sites_options[<?php _e($i); ?>][enabled]" value="1" /></td>
-			<td><input type="text" name="master_plugin_sites_options[<?php _e($i); ?>][url]" ></td>
-			<td><input type="text" name="master_plugin_sites_options[<?php _e($i); ?>][username]"  ></td>
-			<td><input type="text" name="master_plugin_sites_options[<?php _e($i); ?>][password]" ></td>
-			<td><label>OK</label></td>
+			<td><input type="checkbox" name="<?php _e($input_name . "[enabled]"); ?>" value="1" /></td>
+			<td><input type="text" name="<?php _e($input_name . "[name]"); ?>" ></td>
+			<td><input type="text" name="<?php _e($input_name . "[username]"); ?>"  ></td>
+			<td><input type="text" name="<?php _e($input_name . "[password]"); ?>" ></td>
+			<td></td>
 		</tr>
 	</tbody>
 </table>
@@ -195,16 +217,17 @@ function master_sites_callback()
 
 function master_posts_callback($args) {
     $post_type = $args['post_type'];
-    $sites = get_option('master_plugin_sites_options');
-    $rules = get_option('master_plugin_posts_options');
+    $sites = get_option(SITE_OPT);
+    $rules = get_option(POST_OPT);
     ?>
         <fieldset>
          <?php foreach ($sites as $site): ?>
             <?php if (isset($site['enabled']) && $site['enabled']):?>
-                <?php $url = $site['url']; ?>
+                <?php $name = $site['name']; ?>
+                <?php $input_name = POST_OPT . "[$post_type][$name]" ?>
                 <label>
-                    <input type="checkbox" value="1" name="<?php _e("master_plugin_posts_options[$post_type][$url]") ?>" <?php checked(1, isset($rules[$post_type][$url]) ? 1 : 0 ) ?> />
-                    <?php _e($url) ?>
+                    <input type="checkbox" value="1" name="<?php _e($input_name) ?>" <?php checked(1, isset($rules[$post_type][$name]) ? 1 : 0 ) ?> />
+                    <?php _e($name) ?>
                 </label><br/>
             <?php endif; ?>
           <?php endforeach;?>

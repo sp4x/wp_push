@@ -1,7 +1,5 @@
 <?php
 
-
-
 class Test extends WP_UnitTestCase
 {
 
@@ -18,6 +16,18 @@ class Test extends WP_UnitTestCase
         ));
         $this->post = get_post($this->ID);
         $this->site = 'testsite';
+        
+        $site_opt[0]['name'] = 'site1';
+        $site_opt[0]['enabled'] = 1;
+        $site_opt[1]['name'] = 'site2';
+        $site_opt[1]['enabled'] = 1;
+        update_option(SITE_OPT, $site_opt);
+        
+        $post_opt['post']['site1'] = 1;
+        $post_opt['custom1']['site1'] = 1;
+        $post_opt['custom1']['site2'] = 1;
+        $post_opt['custom2']['site2'] = 1;
+        update_option(POST_OPT, $post_opt);
     }
 
     function test_new_post()
@@ -29,14 +39,17 @@ class Test extends WP_UnitTestCase
         $remote_post = get_post($remote_id);
         $this->assertEquals($this->post->post_content, $remote_post->post_content);
     }
-    
+
     function test_update_post()
     {
         $master = new Master();
-    
+        
         $remote_id = $master->push($this->post, $this->site);
         
-        wp_update_post(array('ID' => $this->ID, 'post_content' => 'updated'));
+        wp_update_post(array(
+            'ID' => $this->ID,
+            'post_content' => 'updated'
+        ));
         $updated_post = get_post($this->ID);
         $this->assertEquals('updated', $updated_post->post_content);
         $master->push($updated_post, $this->site);
@@ -44,8 +57,6 @@ class Test extends WP_UnitTestCase
         $remote_post = get_post($remote_id);
         $this->assertEquals('updated', $remote_post->post_content);
     }
-    
-    
 
     function test_taxonomy()
     {
@@ -91,18 +102,18 @@ class Test extends WP_UnitTestCase
         set_post_thumbnail($this->post, $attach_id);
         
         $master = new Master();
-       
+        
         $remote_id = $master->push($this->post, $this->site);
         $remote_thumb_id = get_post_thumbnail_id($remote_id);
         $this->assertEquals(get_post($attach_id)->post_title, get_post($remote_thumb_id)->post_title);
     }
-    
+
     function test_gallery()
     {
         $master = new Master();
-    
+        
         $remote_id = $master->push($this->post, $this->site);
-    
+        
         $test_id = wp_insert_post(array(
             'post_content' => "[gallery ids=\"$this->ID\"]"
         ));
@@ -110,7 +121,6 @@ class Test extends WP_UnitTestCase
         $test_post = get_post($test_id);
         $remote_test_id = $master->push($test_post, $this->site);
         $this->assertEquals("[gallery ids=\"$remote_id\"]", get_post($remote_test_id)->post_content);
-        
     }
 
     function test_new_custom_field()
@@ -144,6 +154,35 @@ class Test extends WP_UnitTestCase
         $this->assertEquals(get_post_meta($this->ID, $meta_key), get_post_meta($remote_id, $meta_key));
     }
 
+    function test_update_post_meta_with_array()
+    {
+        $meta_key = 'meta_tk_test';
+        $master = new Master();
+        $value = array(
+            "first" => "is first",
+            "second" => "is second"
+        );
+        add_post_meta($this->ID, $meta_key, $value);
+        $master->publish_post($this->ID, $this->post);
+        
+        $mapping = get_post_meta($this->ID, MAPPING_META_KEY, true);
+        $remote_id = $mapping['site1'];
+        $remote_meta = get_post_meta($remote_id, $meta_key, true);
+        
+        add_action('updated_post_meta', array(
+            $master,
+            'update_post_meta'
+        ), 10, 4);
+        
+//         $value[0]['value']['publish'] = 'yes';
+//         update_post_meta($this->ID, $meta_key, $value);
+        
+        $remote_meta = get_post_meta($remote_id, $meta_key, true);
+//         var_dump($remote_meta);
+        $this->assertEquals("is second", $remote_meta["second"]);
+        clear_actions();
+    }
+
     function test_same_custom_field()
     {
         $master = new Master();
@@ -161,17 +200,6 @@ class Test extends WP_UnitTestCase
 
     function test_get_site_list()
     {
-        $site_opt[0]['name'] = 'site1';
-        $site_opt[0]['enabled'] = 1;
-        $site_opt[1]['name'] = 'site2';
-        $site_opt[1]['enabled'] = 1;
-        update_option(SITE_OPT, $site_opt);
-        
-        $post_opt['custom1']['site1'] = 1;
-        $post_opt['custom1']['site2'] = 1;
-        $post_opt['custom2']['site2'] = 1;
-        update_option(POST_OPT, $post_opt);
-        
         $ID = wp_insert_post(array(
             'post_content' => 'test',
             'post_type' => 'custom1'
@@ -189,12 +217,6 @@ class Test extends WP_UnitTestCase
 
     function test_publish_post()
     {
-        $site_opt[0]['name'] = 'site1';
-        $site_opt[0]['enabled'] = 1;
-        update_option(SITE_OPT, $site_opt);
-        $post_opt['post']['site1'] = 1;
-        update_option(POST_OPT, $post_opt);
-        
         $master = new Master();
         $master->publish_post($this->ID, $this->post);
         
@@ -204,5 +226,13 @@ class Test extends WP_UnitTestCase
         $this->assertEquals($this->post->post_content, $remote_post->post_content);
     }
     
+    function test_date_equals() {
+        $master = new Master();
+        
+        $remote_id = $master->push($this->post, $this->site);
+        
+        $remote_post = get_post($remote_id);
+        $this->assertEquals($this->post->post_date, $remote_post->post_date);
+    }
     
 }
