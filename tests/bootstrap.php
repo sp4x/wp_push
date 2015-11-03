@@ -5,12 +5,13 @@ if ( ! $_tests_dir ) {
 	$_tests_dir = '/tmp/wordpress-tests-lib';
 }
 
-require_once $_tests_dir . '/includes/functions.php';
+require_once __DIR__ . '/../vendor/autoload.php';
+require_once $_tests_dir . '/functions.php';
 
 function _manually_load_plugin() {
-	require dirname( __FILE__ ) . '/../.php';
+        require dirname( __FILE__ ) . '/../wp_push.php';
 }
 tests_add_filter( 'muplugins_loaded', '_manually_load_plugin' );
 
-require $_tests_dir . '/includes/bootstrap.php';
+require $_tests_dir . '/bootstrap.php';
 
