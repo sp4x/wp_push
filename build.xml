@@ -1,0 +1,48 @@
+<project name="wp_push" default="dist" basedir=".">
+    <property name="version" value="0.1"/>
+
+
+    <target name="prepare">
+      <exec executable="composer" failonerror="true">
+          <arg value="install" />
+     </exec>
+     <exec executable="bin/install-wp-tests.sh" failonerror="true">
+          <arg value="wordpress_test" />
+          <arg value="root" />
+          <arg value="admin" />
+          <arg value="127.0.0.1" />
+          <arg value="latest" />
+     </exec>
+    </target>
+
+    <target name="test" depends="prepare" >
+      <exec executable="phpunit" failonerror="true">
+          <arg value="--log-junit" />
+          <arg path="test-reports/phpunit.xml" />
+          <arg value="--bootstrap"/>
+          <arg path="tests/bootstrap.php" />
+     </exec>
+    </target>
+
+
+
+  <target name="dist" depends="test,clean"
+        description="generate the distribution">
+    <exec executable="sed" failonerror="true">
+        <arg value="-i" />
+        <arg value="s/Version.*/Version: ${version}/g" />
+        <arg value="${ant.project.name}.php" />
+    </exec>
+    <mkdir dir="dist"/>
+    <tar destfile="dist/${ant.project.name}.tar.gz" compression="gzip" basedir="." >
+        <include name="*.php"/>
+        <include name="src/"/>
+    </tar>
+  </target>
+
+
+  <target name="clean" description="clean up">
+    <delete dir="dist"/>
+  </target>
+
+</project>
