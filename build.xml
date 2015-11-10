@@ -9,7 +9,7 @@
      <exec executable="bin/install-wp-tests.sh" failonerror="true">
           <arg value="wordpress_test" />
           <arg value="root" />
-          <arg value="admin" />
+          <arg value="" />
           <arg value="127.0.0.1" />
           <arg value="latest" />
      </exec>
