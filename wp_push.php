@@ -6,7 +6,7 @@ defined("SITE_OPT") || define("SITE_OPT", 'master_plugin_sites_options');
 defined("ERRORS") || define("ERRORS", 'master_plugin_erros');
 
 require_once plugin_dir_path(__FILE__) . '/src/Master.php';
-require_once plugin_dir_path(__FILE__) . '/settings.php';
+require_once plugin_dir_path(__FILE__) . '/src/settings.php';
 
 $types = array();
 

@@ -8,6 +8,7 @@ class Test extends WP_UnitTestCase
     var $post;
 
     var $site;
+    
 
     function setUp()
     {

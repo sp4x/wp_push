@@ -70,6 +70,8 @@ install_test_suite() {
 		sed $ioption "s|localhost|${DB_HOST}|" wp-tests-config.php
 	fi
 
+	cp wp-tests-config.php ..
+
 }
 
 install_db() {
@@ -89,7 +91,7 @@ install_db() {
 		fi
 	fi
 
-	# create database
+	mysqladmin drop $DB_NAME --user="$DB_USER" --password="$DB_PASS"$EXTRA -f || true
 	mysqladmin create $DB_NAME --user="$DB_USER" --password="$DB_PASS"$EXTRA
 }
 
