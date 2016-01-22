@@ -1,4 +1,4 @@
-<project name="wp_push" default="dist" basedir=".">
+<project name="wp-push" default="dist" basedir=".">
 	<property name="version" value="0.2" />
 
 
