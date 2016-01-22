@@ -1,5 +1,7 @@
 {
-    "require-dev" : {
-    	"phpunit/phpunit": "4.4"
-    }
+	"name"             : "sp4x/wp_push",
+	"type"             : "wordpress-plugin",
+	"require-dev"      : {
+		"phpunit/phpunit": "*@stable"
+	}
 }

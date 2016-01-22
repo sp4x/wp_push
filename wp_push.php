@@ -5,7 +5,8 @@ defined("POST_OPT") || define("POST_OPT", 'master_plugin_posts_options');
 defined("SITE_OPT") || define("SITE_OPT", 'master_plugin_sites_options');
 defined("ERRORS") || define("ERRORS", 'master_plugin_erros');
 
-require_once plugin_dir_path(__FILE__) . '/src/Master.php';
+require_once plugin_dir_path(__FILE__) . '/src/wp-async-task.php';
+require_once plugin_dir_path(__FILE__) . '/src/master.php';
 require_once plugin_dir_path(__FILE__) . '/src/settings.php';
 
 $types = array();
@@ -28,6 +29,10 @@ function register_actions()
         ), 10, 2);
     }
     
+    
+    add_action('edited_term', array($master, 'update_term'), 10, 3);
+    
+    
     add_action('edit_attachment', array(
         $master,
         'publish_post'
@@ -41,6 +46,16 @@ function register_actions()
     add_action('added_post_meta', array(
         $master,
         'update_post_meta'
+    ), 10, 4);
+    
+    add_action('updated_term_meta', array(
+        $master,
+        'update_term_meta'
+    ), 10, 4);
+    
+    add_action('added_term_meta', array(
+        $master,
+        'update_term_meta'
     ), 10, 4);
     
     add_action('admin_notices', 'display_errors');
@@ -99,6 +114,10 @@ function clear_actions()
     global $types;
     remove_all_actions('added_post_meta');
     remove_all_actions('updated_post_meta');
+    remove_all_actions('edited_term');
+    remove_all_actions('edit_attachment');
+    remove_all_actions('updated_term_meta');
+    remove_all_actions('added_term_meta');
     foreach ($types as $post_type) {
         remove_all_actions("publish_$post_type");
     }

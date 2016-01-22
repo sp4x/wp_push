@@ -6,9 +6,13 @@
 	convertNoticesToExceptions="true"
 	convertWarningsToExceptions="true"
 	>
+	<logging>
+		<log type="tap" target="php://stdout" />
+	</logging>
 	<testsuites>
 		<testsuite>
-			<directory prefix="test" suffix=".php">./tests/</directory>
+			<directory suffix="test.php">./tests/</directory>
 		</testsuite>
 	</testsuites>
 </phpunit>
+

@@ -9,7 +9,7 @@ class Master
 
     var $media_manager;
 
-    function __construct($client = null, $media_manager = null)
+    public function __construct($client = null, $media_manager = null)
     {
         if ($client) {
             $this->client = $client;
@@ -39,10 +39,7 @@ class Master
             unset($content['post_date_gmt']);
         }
         
-        $terms_names = $this->get_terms_names($post);
-        if (! empty($terms_names)) {
-            $content['terms_names'] = $terms_names;
-        }
+        $content['terms'] = $this->get_terms($post, $site);
         
         $thumbnail_id = get_post_thumbnail_id($post->ID);
         if ($thumbnail_id) {
@@ -83,19 +80,22 @@ class Master
 
     /**
      */
-    private function get_terms_names($post)
+    private function get_terms($post, $site)
     {
-        $terms_names = array();
-        $tax_list = get_object_taxonomies($post->post_type);
-        foreach ($tax_list as $tax) {
-            $tax_names = wp_get_post_terms($post->ID, $tax, array(
-                "fields" => "names"
-            ));
-            if ($tax_names) {
-                $terms_names[$tax] = $tax_names;
+        $terms = wp_get_post_terms($post->ID);
+        $remote_terms = array();
+        foreach ($terms as $term) {
+            $mapping = get_term_meta($term->term_id, MAPPING_META_KEY, true);
+            if (! isset($mapping[$site])) {
+                $remote_id = $this->client->xmlrpc_new_term($site, $term);
+                $metadata = get_term_meta($term->term_id);
+                $this->client->xmlrpc_add_term_meta($site, $remote_id, $metadata);
+                $mapping[$site] = $remote_id;
+                update_term_meta($term->term_id, MAPPING_META_KEY, $mapping);
+                $remote_terms[$term->taxonomy][] = $remote_id;
             }
         }
-        return $terms_names;
+        return $remote_terms;
     }
 
     /**
@@ -184,7 +184,7 @@ class Master
         return $entry['name'];
     }
 
-    function get_site_list($post)
+    public function get_site_list($post)
     {
         $site_opt = get_option(SITE_OPT);
         $post_opt = get_option(POST_OPT);
@@ -193,7 +193,7 @@ class Master
         if (! $site_opt || ! $post_opt)
             return array();
         
-        if (! isset($post_opt[$post->post_type]) && !$mapping)
+        if (! isset($post_opt[$post->post_type]) && ! $mapping)
             return array();
         
         $target_sites = array();
@@ -205,7 +205,6 @@ class Master
             $this,
             'get_entry_name'
         ), $destinations);
-        
         
         if (isset($post_opt[$post->post_type])) {
             $enabled_targets = array_keys(array_filter($post_opt[$post->post_type]));
@@ -220,7 +219,7 @@ class Master
         return array_intersect($target_sites, $sites);
     }
 
-    function publish_post($ID, $post = null)
+    public function publish_post($ID, $post = null)
     {
         if ($post == null) {
             $post = get_post($ID);
@@ -244,8 +243,8 @@ class Master
         update_option(ERRORS, $errors);
         error_log($e);
     }
-    
-    function update_post_meta($meta_id, $post_id, $meta_key, $meta_value)
+
+    public function update_post_meta($meta_id, $post_id, $meta_key, $meta_value)
     {
         $update = $this->skip_mapping($meta_key) && $this->skip_private_keys($meta_key);
         if ($update) {
@@ -257,7 +256,7 @@ class Master
         $this->media_manager->update_post_meta($meta_id, $post_id, $meta_key, $meta_value);
     }
 
-    function update_custom_fields_for_mapping($post_id, $mapping)
+    private function update_custom_fields_for_mapping($post_id, $mapping)
     {
         foreach ($mapping as $site => $remote_id) {
             try {
@@ -269,7 +268,7 @@ class Master
         }
     }
 
-    function get_local_custom_fields($id)
+    private function get_local_custom_fields($id)
     {
         $local_server = new wp_xmlrpc_server();
         $fields = $local_server->get_custom_fields($id);
@@ -287,6 +286,30 @@ class Master
             $item['value'] = unserialize($value);
         }
         return $item;
+    }
+
+    public function update_term($term_id, $tt_id, $taxonomy)
+    {
+        $mapping = get_term_meta($term_id, MAPPING_META_KEY, true);
+        $wp_term = get_term($term_id, $taxonomy);
+        if ($mapping) {
+            foreach ($mapping as $site => $remote_id) {
+                $this->client->xmlrpc_edit_term($site, $remote_id, $wp_term);
+            }
+        }
+    }
+
+    public function update_term_meta($meta_id, $term_id, $meta_key, $_meta_value)
+    {
+        $update = $this->skip_mapping($meta_key) && $this->skip_private_keys($meta_key);
+        if ($update) {
+            $mapping = get_term_meta($term_id, MAPPING_META_KEY, true);
+            if ($mapping) {
+                foreach ($mapping as $site => $remote_id) {
+                    $this->client->xmlrpc_update_term_meta($site, $remote_id, $meta_key, $_meta_value);
+                }
+            }
+        }
     }
 }
 
